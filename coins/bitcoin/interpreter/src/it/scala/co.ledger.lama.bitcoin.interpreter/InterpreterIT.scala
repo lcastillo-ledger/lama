@@ -105,7 +105,7 @@ class InterpreterIT extends AnyFlatSpecLike with Matchers with TestResources {
           GetOperationsResult(opsBeforeDeletion, opsBeforeDeletionTotal, opsBeforeDeletionTrunc) =
             resOpsBeforeDeletion
 
-          resUtxoBeforeDeletion <- interpreter.getUTXOs(
+          resUtxoBeforeDeletion <- interpreter.getUtxos(
             accountId,
             20,
             0,

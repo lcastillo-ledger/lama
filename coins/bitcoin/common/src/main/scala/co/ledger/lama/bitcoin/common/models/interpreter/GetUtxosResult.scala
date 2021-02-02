@@ -10,8 +10,8 @@ case class GetUtxosResult(
     total: Int,
     truncated: Boolean
 ) {
-  def toProto: protobuf.GetUTXOsResult =
-    protobuf.GetUTXOsResult(
+  def toProto: protobuf.GetUtxosResult =
+    protobuf.GetUtxosResult(
       utxos.map(_.toProto),
       total,
       truncated
@@ -24,7 +24,7 @@ object GetUtxosResult {
   implicit val encoder: Encoder[GetUtxosResult] =
     deriveConfiguredEncoder[GetUtxosResult]
 
-  def fromProto(proto: protobuf.GetUTXOsResult): GetUtxosResult =
+  def fromProto(proto: protobuf.GetUtxosResult): GetUtxosResult =
     GetUtxosResult(
       proto.utxos.map(Utxo.fromProto).toList,
       proto.total,

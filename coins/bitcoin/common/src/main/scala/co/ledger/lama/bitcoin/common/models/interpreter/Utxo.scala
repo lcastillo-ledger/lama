@@ -17,7 +17,8 @@ case class Utxo(
     scriptHex: String,
     changeType: Option[ChangeType],
     derivation: NonEmptyList[Int],
-    time: Instant
+    time: Instant,
+    usedInMempool: Boolean = false
 ) {
   def toProto: protobuf.Utxo =
     protobuf.Utxo(
@@ -28,7 +29,8 @@ case class Utxo(
       scriptHex,
       changeType.getOrElse(ChangeType.External).toProto,
       derivation.toList,
-      Some(TimestampProtoUtils.serialize(time))
+      Some(TimestampProtoUtils.serialize(time)),
+      usedInMempool
     )
 }
 
@@ -45,6 +47,7 @@ object Utxo {
       proto.scriptHex,
       Some(ChangeType.fromProto(proto.changeType)),
       NonEmptyList.fromListUnsafe(proto.derivation.toList),
-      proto.time.map(TimestampProtoUtils.deserialize).getOrElse(Instant.now())
+      proto.time.map(TimestampProtoUtils.deserialize).getOrElse(Instant.now()),
+      proto.usedInMempool
     )
 }

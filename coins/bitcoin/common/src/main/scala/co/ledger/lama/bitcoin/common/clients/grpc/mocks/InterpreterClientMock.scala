@@ -192,7 +192,7 @@ class InterpreterClientMock extends InterpreterClient {
     )
   }
 
-  def getUTXOs(
+  def getUtxos(
       accountId: UUID,
       limit: Int,
       offset: Int,
@@ -234,6 +234,8 @@ class InterpreterClientMock extends InterpreterClient {
     )
 
   }
+
+  def getUnconfirmedUtxos(accountId: UUID): IO[List[Utxo]] = IO.pure(Nil)
 
   def getBalance(accountId: UUID): IO[CurrentBalance] =
     IO.raiseError(new Exception("Not implements Yet"))

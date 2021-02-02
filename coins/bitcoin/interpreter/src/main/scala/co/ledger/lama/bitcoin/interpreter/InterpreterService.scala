@@ -78,7 +78,7 @@ class InterpreterGrpcService(
     } yield opResult.toProto
   }
 
-  def getUTXOs(request: protobuf.GetUTXOsRequest, ctx: Metadata): IO[protobuf.GetUTXOsResult] = {
+  def getUtxos(request: protobuf.GetUtxosRequest, ctx: Metadata): IO[protobuf.GetUtxosResult] = {
     for {
       accountId <- UuidUtils.bytesToUuidIO(request.accountId)
       sort = Sort.fromIsAsc(request.sort.isAsc)
@@ -87,11 +87,24 @@ class InterpreterGrpcService(
                                - limit: ${request.limit}
                                - offset: ${request.offset}
                                - sort: $sort""")
-      res <- interpreter.getUTXOs(accountId, request.limit, request.offset, sort)
+      res <- interpreter.getUtxos(accountId, request.limit, request.offset, sort)
     } yield {
       res.toProto
     }
   }
+
+  def getUnconfirmedUtxos(
+      request: protobuf.GetUnconfirmedUtxosRequest,
+      ctx: Metadata
+  ): IO[protobuf.GetUnconfirmedUtxosResult] =
+    for {
+      accountId        <- UuidUtils.bytesToUuidIO(request.accountId)
+      _                <- log.info(s"""Getting UTXOs with parameters:
+                         - accountId: $accountId""")
+      unconfirmedUtxos <- interpreter.getUnconfirmedUtxos(accountId)
+    } yield {
+      protobuf.GetUnconfirmedUtxosResult(unconfirmedUtxos.map(_.toProto))
+    }
 
   def removeDataFromCursor(
       request: protobuf.DeleteTransactionsRequest,

@@ -181,7 +181,7 @@ class OperationIT extends AnyFlatSpecLike with Matchers with TestResources {
             .through(operationService.saveOperationSink)
             .compile
             .toList
-          res <- operationService.getUTXOs(accountId, Sort.Ascending, 20, 0)
+          res <- operationService.getUtxos(accountId, Sort.Ascending, 20, 0)
           GetUtxosResult(utxos, total, trunc) = res
         } yield {
           utxos should have size 1
@@ -192,6 +192,107 @@ class OperationIT extends AnyFlatSpecLike with Matchers with TestResources {
 
           utxo.address shouldBe outputAddress1.accountAddress
           utxo.changeType shouldBe Some(outputAddress1.changeType)
+        }
+      }
+  }
+
+  "unconfirmed Transactions" should "have made utxos" in IOAssertion {
+    setup() *>
+      appResources.use { db =>
+        val operationService = new OperationService(db, conf.maxConcurrent)
+
+        val unconfirmedTransaction1 = TransactionView(
+          "txId1",
+          "txHash1",
+          Instant.now,
+          0L,
+          0,
+          List(
+            InputView(
+              "someOtherTransaction",
+              0,
+              0,
+              1000,
+              "notMyAddress",
+              "script",
+              Nil,
+              Int.MaxValue,
+              None
+            )
+          ),
+          List(
+            OutputView( //create UTXO
+              0,
+              1000,
+              "myAddress",
+              "script",
+              Some(ChangeType.External),
+              Some(NonEmptyList(0, List(0)))
+            )
+          ),
+          None,
+          0
+        )
+
+        val unconfirmedTransaction2 = TransactionView(
+          "txId2",
+          "txHash2",
+          Instant.now,
+          0L,
+          0,
+          List(
+            InputView( //using previously made UTXO
+              "txHash1",
+              0,
+              0,
+              1000,
+              "myAddress",
+              "script",
+              Nil,
+              Int.MaxValue,
+              Some(NonEmptyList(0, List(0)))
+            )
+          ),
+          List( //creating 2 new UTXOs
+            OutputView(
+              0,
+              250,
+              "myAddress2",
+              "script",
+              Some(ChangeType.Internal),
+              Some(NonEmptyList(1, List(0)))
+            ),
+            OutputView(
+              1,
+              250,
+              "myAddress3",
+              "script",
+              Some(ChangeType.External),
+              Some(NonEmptyList(0, List(2)))
+            ),
+            OutputView(
+              0,
+              800,
+              "notMyAddress",
+              "script",
+              None,
+              None
+            )
+          ),
+          None,
+          0
+        )
+
+        for {
+          _ <- QueryUtils.saveUnconfirmedTxView(
+            db,
+            accountId,
+            List(unconfirmedTransaction1, unconfirmedTransaction2)
+          )
+          utxos <- operationService.getUnconfirmedUtxos(accountId)
+        } yield {
+          utxos should have size 2
+          utxos.map(_.value).sum should be(500)
         }
       }
   }

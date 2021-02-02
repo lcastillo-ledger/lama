@@ -42,7 +42,7 @@ class Transactor(
 
     for {
 
-      utxos <- getUTXOs(accountId, 100, Sort.Ascending).compile.toList
+      utxos <- getUTXOs(accountId, 100, Sort.Ascending).filter(!_.usedInMempool).compile.toList
       _ <- log.info(
         s"""Utxos found for account $accountId:
             - number of utxos: ${utxos.size}
@@ -228,7 +228,7 @@ class Transactor(
   private def getUTXOs(accountId: UUID, limit: Int, sort: Sort): Stream[IO, Utxo] = {
     def getUtxosRec(accountId: UUID, limit: Int, offset: Int, sort: Sort): Stream[IO, Utxo] = {
       Stream
-        .eval(interpreterClient.getUTXOs(accountId, limit + offset, offset, Some(sort)))
+        .eval(interpreterClient.getUtxos(accountId, limit + offset, offset, Some(sort)))
         .flatMap { result =>
           val head = Stream.chunk(Chunk.seq(result.utxos)).covary[IO]
 

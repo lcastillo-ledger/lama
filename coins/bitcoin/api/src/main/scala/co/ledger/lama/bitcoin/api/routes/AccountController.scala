@@ -203,7 +203,7 @@ object AccountController extends Http4sDsl[IO] with IOLogging {
           +& OptionalSortQueryParamMatcher(sort) =>
         log.info(s"Fetching UTXOs for account: $accountId") *>
           interpreterClient
-            .getUTXOs(
+            .getUtxos(
               accountId = accountId,
               limit = limit.getOrElse(0),
               offset = offset.getOrElse(0),

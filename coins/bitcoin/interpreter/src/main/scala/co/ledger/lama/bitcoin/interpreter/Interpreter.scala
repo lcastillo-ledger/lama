@@ -57,7 +57,7 @@ class Interpreter(
     operationService.getOperations(accountId, blockHeight, limit, offset, sort)
   }
 
-  def getUTXOs(
+  def getUtxos(
       accountId: UUID,
       requestLimit: Int,
       requestOffset: Int,
@@ -65,8 +65,13 @@ class Interpreter(
   ): IO[GetUtxosResult] = {
     val limit  = if (requestLimit <= 0) 20 else requestLimit
     val offset = if (requestOffset < 0) 0 else requestOffset
-    operationService.getUTXOs(accountId, sort, limit, offset)
+    operationService.getUtxos(accountId, sort, limit, offset)
   }
+
+  def getUnconfirmedUtxos(
+      accountId: UUID
+  ): IO[List[Utxo]] =
+    operationService.getUnconfirmedUtxos(accountId)
 
   def removeDataFromCursor(
       accountId: UUID,

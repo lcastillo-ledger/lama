@@ -76,4 +76,12 @@ object implicits {
       .map { case (accountId, hash, operationType, value, fees, time, height) =>
         Operation(accountId, hash, None, operationType, value, fees, time, height)
       }
+
+  implicit lazy val readUtxos: Read[Utxo] =
+    Read[(String, Int, BigInt, String, String, Option[ChangeType], NonEmptyList[Int], Instant)]
+      .map {
+        case (hash, outputIndex, value, address, scriptHex, changeType, derivation, blockTime) =>
+          Utxo(hash, outputIndex, value, address, scriptHex, changeType, derivation, blockTime)
+      }
+
 }

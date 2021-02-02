@@ -35,12 +35,16 @@ trait InterpreterClient {
       sort: Option[Sort]
   ): IO[GetOperationsResult]
 
-  def getUTXOs(
+  def getUtxos(
       accountId: UUID,
       limit: Int,
       offset: Int,
       sort: Option[Sort]
   ): IO[GetUtxosResult]
+
+  def getUnconfirmedUtxos(
+      accountId: UUID
+  ): IO[List[Utxo]]
 
   def getBalance(accountId: UUID): IO[CurrentBalance]
 
@@ -128,15 +132,15 @@ class InterpreterGrpcClient(
       )
       .map(GetOperationsResult.fromProto)
 
-  def getUTXOs(
+  def getUtxos(
       accountId: UUID,
       limit: Int,
       offset: Int,
       sort: Option[Sort]
   ): IO[GetUtxosResult] = {
     client
-      .getUTXOs(
-        protobuf.GetUTXOsRequest(
+      .getUtxos(
+        protobuf.GetUtxosRequest(
           accountId = UuidUtils.uuidToBytes(accountId),
           limit = limit,
           offset = offset,
@@ -145,6 +149,19 @@ class InterpreterGrpcClient(
         new Metadata
       )
       .map(GetUtxosResult.fromProto)
+  }
+
+  def getUnconfirmedUtxos(
+      accountId: UUID
+  ): IO[List[Utxo]] = {
+    client
+      .getUnconfirmedUtxos(
+        protobuf.GetUnconfirmedUtxosRequest(
+          accountId = UuidUtils.uuidToBytes(accountId)
+        ),
+        new Metadata
+      )
+      .map(_.utxos.map(Utxo.fromProto).toList)
   }
 
   def getBalance(accountId: UUID): IO[CurrentBalance] = {
