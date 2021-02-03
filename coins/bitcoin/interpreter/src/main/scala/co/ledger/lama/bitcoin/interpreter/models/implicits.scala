@@ -43,38 +43,47 @@ object implicits {
   implicit lazy val readTransactionView: Read[TransactionView] =
     Read[
       (String, String, Option[String], Option[Long], Option[Instant], Instant, Long, BigInt, Int)
-    ]
-      .map {
-        case (
-              id,
-              hash,
-              blockHashO,
-              blockHeightO,
-              blockTimeO,
-              receivedAt,
-              lockTime,
-              fees,
-              confirmations
-            ) =>
-          TransactionView(
-            id = id,
-            hash = hash,
-            receivedAt = receivedAt,
-            lockTime = lockTime,
-            fees = fees,
-            inputs = Seq(),
-            outputs = Seq(),
-            block =
-              blockHashO.map(blockHash => BlockView(blockHash, blockHeightO.get, blockTimeO.get)),
-            confirmations = confirmations
-          )
-      }
+    ].map {
+      case (
+            id,
+            hash,
+            blockHashO,
+            blockHeightO,
+            blockTimeO,
+            receivedAt,
+            lockTime,
+            fees,
+            confirmations
+          ) =>
+        TransactionView(
+          id = id,
+          hash = hash,
+          receivedAt = receivedAt,
+          lockTime = lockTime,
+          fees = fees,
+          inputs = Seq(),
+          outputs = Seq(),
+          block =
+            blockHashO.map(blockHash => BlockView(blockHash, blockHeightO.get, blockTimeO.get)),
+          confirmations = confirmations
+        )
+    }
 
   // Needs implicit because of the Transaction "None"
   implicit lazy val readOperation: Read[Operation] =
-    Read[(UUID, String, OperationType, BigInt, BigInt, Instant, Option[Long])]
-      .map { case (accountId, hash, operationType, value, fees, time, height) =>
-        Operation(accountId, hash, None, operationType, value, fees, time, height)
+    Read[(String, UUID, String, OperationType, BigInt, BigInt, Instant, Option[Long])]
+      .map { case (uid, accountId, hash, operationType, value, fees, time, height) =>
+        Operation(
+          Operation.UID(uid),
+          accountId,
+          hash,
+          None,
+          operationType,
+          value,
+          fees,
+          time,
+          height
+        )
       }
 
   implicit lazy val readUtxos: Read[Utxo] =

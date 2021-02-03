@@ -2,15 +2,20 @@ package co.ledger.lama.bitcoin.interpreter.models
 
 import java.time.Instant
 import java.util.UUID
-
 import co.ledger.lama.common.models.implicits._
-import co.ledger.lama.bitcoin.common.models.interpreter.{ChangeType, OperationType, TransactionView}
+import co.ledger.lama.bitcoin.common.models.interpreter.{
+  ChangeType,
+  Operation,
+  OperationType,
+  TransactionView
+}
 import co.ledger.lama.common.logging.IOLogging
 import fs2.Chunk
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.extras.semiauto._
 
 case class OperationToSave(
+    uid: Operation.UID,
     accountId: UUID,
     hash: String,
     operationType: OperationType,
@@ -82,6 +87,7 @@ case class TransactionAmounts(
 
   private def makeOperationToSave(amount: BigInt, operationType: OperationType) = {
     OperationToSave(
+      Operation.uid(Operation.AccountId(accountId), Operation.TxId(hash), operationType),
       accountId = accountId,
       hash = hash,
       operationType = operationType,

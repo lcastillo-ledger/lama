@@ -222,13 +222,12 @@ class OperationIT extends AnyFlatSpecLike with Matchers with TestResources {
           ),
           List(
             OutputView( //create UTXO
-              0,
-              1000,
-              "myAddress",
-              "script",
-              Some(ChangeType.External),
-              Some(NonEmptyList(0, List(0)))
-            )
+                       0,
+                       1000,
+                       "myAddress",
+                       "script",
+                       Some(ChangeType.External),
+                       Some(NonEmptyList(0, List(0))))
           ),
           None,
           0
@@ -242,16 +241,15 @@ class OperationIT extends AnyFlatSpecLike with Matchers with TestResources {
           0,
           List(
             InputView( //using previously made UTXO
-              "txHash1",
-              0,
-              0,
-              1000,
-              "myAddress",
-              "script",
-              Nil,
-              Int.MaxValue,
-              Some(NonEmptyList(0, List(0)))
-            )
+                      "txHash1",
+                      0,
+                      0,
+                      1000,
+                      "myAddress",
+                      "script",
+                      Nil,
+                      Int.MaxValue,
+                      Some(NonEmptyList(0, List(0))))
           ),
           List( //creating 2 new UTXOs
             OutputView(

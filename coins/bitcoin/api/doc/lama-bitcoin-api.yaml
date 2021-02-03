@@ -587,6 +587,7 @@ components:
           example: '2021-01-05T10:15:35.067Z'
     Operation:
       required:
+        - uid
         - accountId
         - hash
         - operation_type
@@ -595,6 +596,10 @@ components:
         - time
       type: object
       properties:
+        uid:
+          type: string
+          format: hex
+          example: "0f839db5e49731cf76e9e3edec3adcbc3ca649087472d4ef321832742ca9cf8f"
         accountId:
           type: string
           format: uuid

@@ -74,11 +74,17 @@ class QueriesIT extends AnyFlatSpecLike with Matchers with TestResources {
   }
 
   val opToSave: OperationToSave = OperationToSave(
+    Operation.uid(
+      Operation.AccountId(accountId),
+      Operation.TxId(transactionToInsert.id),
+      OperationType.Sent
+    ),
     accountId,
     transactionToInsert.hash,
     OperationType.Sent,
-    transactionToInsert.inputs.collect { case i: DefaultInput =>
-      i.value
+    transactionToInsert.inputs.collect {
+      case i: DefaultInput =>
+        i.value
     }.sum,
     transactionToInsert.fees,
     block.time,
@@ -96,6 +102,7 @@ class QueriesIT extends AnyFlatSpecLike with Matchers with TestResources {
         } yield {
           op should contain only
             Operation(
+              opToSave.uid,
               opToSave.accountId,
               opToSave.hash,
               None,

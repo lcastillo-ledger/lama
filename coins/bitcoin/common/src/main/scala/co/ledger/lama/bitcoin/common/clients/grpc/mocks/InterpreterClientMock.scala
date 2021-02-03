@@ -157,6 +157,7 @@ class InterpreterClientMock extends InterpreterClient {
       operationType: OperationType
   ) = {
     Operation(
+      Operation.uid(Operation.AccountId(accountId), Operation.TxId(tx.id), operationType),
       accountId,
       tx.hash,
       Some(tx),

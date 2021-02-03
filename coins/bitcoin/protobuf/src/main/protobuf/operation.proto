@@ -25,6 +25,7 @@ message Operation {
   string fees = 6;
   google.protobuf.Timestamp time = 7;
   int64 block_height = 8;
+  string uid = 9;
 }
 
 message TransactionView {
