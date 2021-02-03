@@ -61,6 +61,12 @@ class TransactorIT extends AnyFlatSpecLike with Matchers {
       Output(2, 5000, outputAddress3.accountAddress, "script")
     )
 
+    val block = Block(
+      "blockHash",
+      1L,
+      Instant.parse("2019-04-04T10:03:22Z")
+    )
+
     // We need to create some utxos
     val transactions = List(
       ConfirmedTransaction(
@@ -71,11 +77,7 @@ class TransactorIT extends AnyFlatSpecLike with Matchers {
         20566,
         Nil,
         outputs,
-        Block(
-          "blockHash",
-          1L,
-          Instant.parse("2019-04-04T10:03:22Z")
-        ),
+        block,
         1
       )
     )
@@ -95,7 +97,8 @@ class TransactorIT extends AnyFlatSpecLike with Matchers {
       _ <- interpreterService.compute(
         accountId,
         Btc,
-        List(outputAddress1, outputAddress2, outputAddress3)
+        List(outputAddress1, outputAddress2, outputAddress3),
+        Some(block.height)
       )
 
       // create a transaction using prevously saved utxoq

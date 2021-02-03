@@ -73,7 +73,12 @@ class InterpreterClientMock extends InterpreterClient {
     IO(GetLastBlocksResult(lastBlocks))
   }
 
-  def compute(accountId: UUID, coin: Coin, addresses: List[AccountAddress]): IO[Int] = {
+  def compute(
+      accountId: UUID,
+      coin: Coin,
+      addresses: List[AccountAddress],
+      lastblockHeight: Option[Long]
+  ): IO[Int] = {
 
     val txViews = savedTransactions(accountId).map(tx =>
       TransactionView(

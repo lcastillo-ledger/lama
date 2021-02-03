@@ -125,14 +125,6 @@ class Worker(
 
       addresses = batchResults.flatMap(_.addresses)
 
-      opsCount <- interpreterClient.compute(
-        account.id,
-        account.coin,
-        (addresses ++ addressesUsedByMempool).distinct
-      )
-
-      _ <- log.info(s"$opsCount operations computed")
-
       txs = batchResults.flatMap(_.transactions).distinctBy(_.hash)
 
       lastBlock =
@@ -140,6 +132,16 @@ class Worker(
         else Some(txs.maxBy(_.block.time).block)
 
       _ <- log.info(s"New cursor state: $lastBlock")
+
+      opsCount <- interpreterClient.compute(
+        account.id,
+        account.coin,
+        (addresses ++ addressesUsedByMempool).distinct,
+        lastBlock.map(_.height)
+      )
+
+      _ <- log.info(s"$opsCount operations computed")
+
     } yield {
       // Create the reportable successful event.
       workableEvent.asReportableSuccessEvent(lastBlock)

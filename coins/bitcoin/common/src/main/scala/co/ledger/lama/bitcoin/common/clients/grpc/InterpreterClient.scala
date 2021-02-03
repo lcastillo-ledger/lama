@@ -24,7 +24,8 @@ trait InterpreterClient {
   def compute(
       accountId: UUID,
       coin: Coin,
-      addresses: List[AccountAddress]
+      addresses: List[AccountAddress],
+      lastBlockHeight: Option[Long]
   ): IO[Int]
 
   def getOperations(
@@ -100,13 +101,19 @@ class InterpreterGrpcClient(
       )
       .map(GetLastBlocksResult.fromProto)
 
-  def compute(accountId: UUID, coin: Coin, addresses: List[AccountAddress]): IO[Int] =
+  def compute(
+      accountId: UUID,
+      coin: Coin,
+      addresses: List[AccountAddress],
+      lastBlockHeight: Option[Long]
+  ): IO[Int] =
     client
       .compute(
         protobuf.ComputeRequest(
           UuidUtils.uuidToBytes(accountId),
           addresses.map(_.toProto),
-          coin.name
+          coin.name,
+          lastBlockHeight.getOrElse(0L)
         ),
         new Metadata()
       )

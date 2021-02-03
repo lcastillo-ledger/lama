@@ -92,7 +92,12 @@ class InterpreterIT extends AnyFlatSpecLike with Matchers with TestResources {
 
           blocks <- interpreter.getLastBlocks(accountId)
 
-          _ <- interpreter.compute(accountId, List(inputAddress, outputAddress2), Coin.Btc)
+          _ <- interpreter.compute(
+            accountId,
+            List(inputAddress, outputAddress2),
+            Coin.Btc,
+            block.height
+          )
 
           resOpsBeforeDeletion <- interpreter.getOperations(
             accountId,
@@ -195,7 +200,8 @@ class InterpreterIT extends AnyFlatSpecLike with Matchers with TestResources {
           _ <- interpreter.compute(
             accountId,
             List(outputAddress1),
-            Coin.Btc
+            Coin.Btc,
+            block.height
           )
           res <- interpreter.getOperations(accountId, 0L, 20, 0, Sort.Descending)
           GetOperationsResult(operations, _, _) = res
@@ -209,6 +215,52 @@ class InterpreterIT extends AnyFlatSpecLike with Matchers with TestResources {
           operations.head.blockHeight should be(None)
 
           balanceHistory.last.balance should be(currentBalance.unconfirmedBalance)
+        }
+      }
+
+  }
+
+  "an unconfirmed transaction" should "not be saved if it's been mined" in IOAssertion {
+    setup() *>
+      appResources.use { db =>
+        val interpreter = new Interpreter(_ => IO.unit, db, 1)
+
+        val uTx = UnconfirmedTransaction(
+          "txId",
+          "a8a935c6bc2bd8b3a7c20f107a9eb5f10a315ce27de9d72f3f4e27ac9ec1eb1f",
+          time,
+          0,
+          20566,
+          inputs,
+          outputs,
+          1
+        )
+
+        val tx = ConfirmedTransaction(
+          "txId",
+          "a8a935c6bc2bd8b3a7c20f107a9eb5f10a315ce27de9d72f3f4e27ac9ec1eb1f",
+          time,
+          0,
+          20566,
+          inputs,
+          outputs,
+          block,
+          1
+        )
+
+        for {
+          _ <- interpreter.saveUnconfirmedTransactions(accountId, List(uTx))
+          _ <- interpreter.saveTransactions(accountId, List(tx))
+          _ <- interpreter.compute(
+            accountId,
+            List(outputAddress1),
+            Coin.Btc,
+            block.height
+          )
+          res <- interpreter.getOperations(accountId, 0L, 20, 0, Sort.Descending)
+          GetOperationsResult(operations, _, _) = res
+        } yield {
+          operations should have size 1
         }
       }
 

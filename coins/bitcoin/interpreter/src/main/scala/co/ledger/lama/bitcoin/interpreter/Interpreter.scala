@@ -7,6 +7,7 @@ import co.ledger.lama.bitcoin.interpreter.services._
 import co.ledger.lama.common.logging.IOLogging
 import co.ledger.lama.common.models._
 import io.circe.syntax._
+import fs2.Stream
 import doobie.Transactor
 import java.time.Instant
 import java.util.UUID
@@ -94,22 +95,31 @@ class Interpreter(
   def compute(
       accountId: UUID,
       addresses: List[AccountAddress],
-      coin: Coin
+      coin: Coin,
+      lastBlockHeight: Long
   ): IO[Int] =
     for {
       balanceHistoryCount <- balanceService.getBalanceHistoryCount(accountId)
 
-      unconfirmedTransactions <- computeAndSaveUnconfirmedTxs(accountId, addresses)
+      nbSavedOps <- saveOperationsAndNotify(
+        accountId,
+        operationService.compute(accountId),
+        addresses,
+        coin,
+        balanceHistoryCount > 0
+      )
+
+      unconfirmedTransactions <- computeAndSaveUnconfirmedTxs(accountId, addresses, lastBlockHeight)
       unconfirmedOperations = unconfirmedTransactions.flatMap(
         OperationToSave.fromTransactionView(accountId, _)
       )
 
-      nbSavedOps <- computeOps(
+      _ <- saveOperationsAndNotify(
         accountId,
+        Stream.emits(unconfirmedOperations),
         addresses,
         coin,
-        balanceHistoryCount > 0,
-        unconfirmedOperations
+        balanceHistoryCount > 0
       )
 
       _              <- log.info("Computing balance history")
@@ -129,22 +139,36 @@ class Interpreter(
 
   def computeAndSaveUnconfirmedTxs(
       accountId: UUID,
-      addresses: List[AccountAddress]
+      addresses: List[AccountAddress],
+      lastBlockHeight: Long
   ): IO[List[TransactionView]] =
     for {
-      uTransactions <- transactionService.fetchUnconfirmedTransactions(accountId)
-      transactionsViews = uTransactions.map(_.toTransactionView(addresses))
-      _ <- operationService.deleteUnconfirmedTransactionView(accountId)
-      _ <- operationService.saveUnconfirmedTransactionView(accountId, transactionsViews)
-      _ <- transactionService.deleteUnconfirmedTransaction(accountId)
-    } yield transactionsViews
+      unconfirmedTransactions <- transactionService.fetchUnconfirmedTransactions(accountId)
+      unconfirmedTransactionsViews = unconfirmedTransactions.map(_.toTransactionView(addresses))
 
-  def computeOps(
+      //remove tx mined in between
+      minedTxs <- operationService.getOperations(
+        accountId,
+        lastBlockHeight,
+        1000,
+        0,
+        Sort.Descending
+      )
+      dedupTxs = unconfirmedTransactionsViews.filterNot(utx =>
+        minedTxs.operations.exists(tx => tx.hash == utx.hash)
+      )
+
+      _ <- operationService.deleteUnconfirmedTransactionView(accountId)
+      _ <- operationService.saveUnconfirmedTransactionView(accountId, dedupTxs)
+      _ <- transactionService.deleteUnconfirmedTransaction(accountId)
+    } yield dedupTxs
+
+  def saveOperationsAndNotify(
       accountId: UUID,
+      stream: Stream[IO, OperationToSave],
       addresses: List[AccountAddress],
       coin: Coin,
-      shouldNotify: Boolean,
-      unconfirmedOperations: List[OperationToSave]
+      shouldNotify: Boolean
   ): IO[Int] =
     for {
       _ <- log.info(s"Flagging inputs and outputs belong to account=$accountId")
@@ -153,12 +177,7 @@ class Interpreter(
       _ <- operationService.deleteUnconfirmedOperations(accountId)
 
       _ <- log.info("Computing operations")
-      nbSavedOps <- operationService
-        .compute(accountId)
-        .append(
-          fs2.Stream
-            .emits(unconfirmedOperations)
-        )
+      nbSavedOps <- stream
         .through(operationService.saveOperationSink)
         .parEvalMap(maxConcurrent) { op =>
           if (shouldNotify) {

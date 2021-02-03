@@ -130,7 +130,7 @@ class InterpreterGrpcService(
       )
       accountId <- UuidUtils.bytesToUuidIO(request.accountId)
       addresses <- IO(request.addresses.map(AccountAddress.fromProto).toList)
-      nbOps     <- interpreter.compute(accountId, addresses, coin)
+      nbOps     <- interpreter.compute(accountId, addresses, coin, request.lastBlockHeight)
     } yield protobuf.ResultCount(nbOps)
 
   def getBalance(
