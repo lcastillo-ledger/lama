@@ -192,6 +192,10 @@ class InterpreterClientMock extends InterpreterClient {
       )
     )
   }
+  def getOperation(
+      accountId: UUID,
+      operationId: String
+  ): IO[Option[Operation]] = IO.pure(None)
 
   def getUtxos(
       accountId: UUID,

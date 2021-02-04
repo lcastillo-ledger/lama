@@ -15,6 +15,7 @@ service BitcoinInterpreterService {
   rpc GetLastBlocks(GetLastBlocksRequest) returns (GetLastBlocksResult) {}
   rpc RemoveDataFromCursor(DeleteTransactionsRequest) returns (ResultCount) {}
   rpc GetOperations(GetOperationsRequest) returns (GetOperationsResult) {}
+  rpc GetOperation(GetOperationRequest) returns (GetOperationResult) {}
   rpc Compute(ComputeRequest) returns (ResultCount) {}
   rpc GetUtxos(GetUtxosRequest) returns (GetUtxosResult) {}
   rpc GetUnconfirmedUtxos(GetUnconfirmedUtxosRequest) returns (GetUnconfirmedUtxosResult) {}
@@ -64,6 +65,15 @@ message GetOperationsResult {
   repeated Operation operations = 1;
   int32 total = 2;
   bool truncated = 3;
+}
+
+message GetOperationRequest {
+  bytes account_id = 1;
+  string operation_uid = 2;
+}
+
+message GetOperationResult {
+  Operation operation = 1;
 }
 
 message GetUnconfirmedOperationsRequest {

@@ -198,6 +198,20 @@ object AccountController extends Http4sDsl[IO] with IOLogging {
 
       case GET -> Root / UUIDVar(
             accountId
+          ) / "operations" / uid =>
+        log.info(s"Fetching operations for account: $accountId") *>
+          interpreterClient
+            .getOperation(
+              accountId,
+              operationId = uid
+            )
+            .flatMap {
+              case Some(operation) => Ok(operation)
+              case None            => NotFound(s"No operation in account identified by $uid ")
+            }
+
+      case GET -> Root / UUIDVar(
+            accountId
           ) / "utxos" :? OptionalLimitQueryParamMatcher(limit)
           +& OptionalOffsetQueryParamMatcher(offset)
           +& OptionalSortQueryParamMatcher(sort) =>

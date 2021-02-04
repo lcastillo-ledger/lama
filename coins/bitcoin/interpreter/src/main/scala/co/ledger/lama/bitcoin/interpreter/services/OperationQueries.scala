@@ -227,6 +227,21 @@ object OperationQueries extends IOLogging {
     query.query[Operation].stream
   }
 
+  def findOperation(
+      accountId: Operation.AccountId,
+      operationId: Operation.UID
+  ): ConnectionIO[Option[Operation]] = {
+
+    sql"""SELECT uid, account_id, hash, operation_type, value, fees, time, block_height
+              FROM operation
+             WHERE account_id = ${accountId.value}
+               AND uid = ${operationId.hex}
+             LIMIT 1
+         """
+      .query[Operation]
+      .option
+  }
+
   def flagBelongingInputs(
       accountId: UUID,
       addresses: NonEmptyList[AccountAddress]
