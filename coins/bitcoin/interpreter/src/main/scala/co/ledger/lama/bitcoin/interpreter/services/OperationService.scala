@@ -1,11 +1,12 @@
 package co.ledger.lama.bitcoin.interpreter.services
 
 import java.util.UUID
-
 import cats.effect.{ContextShift, IO}
 import co.ledger.lama.bitcoin.common.models.interpreter.{
+  GetOperationResult,
   GetOperationsResult,
   GetUtxosResult,
+  Operation,
   OutputView,
   TransactionView,
   Utxo
@@ -30,18 +31,17 @@ class OperationService(
       sort: Sort
   )(implicit cs: ContextShift[IO]): IO[GetOperationsResult] =
     for {
-      opsWithTx <-
-        OperationQueries
-          .fetchOperations(accountId, blockHeight, sort, Some(limit + 1), Some(offset))
-          .transact(db)
-          .parEvalMap(maxConcurrent) { op =>
-            OperationQueries
-              .fetchTransaction(op.accountId, op.hash)
-              .transact(db)
-              .map(tx => op.copy(transaction = tx))
-          }
-          .compile
-          .toList
+      opsWithTx <- OperationQueries
+        .fetchOperations(accountId, blockHeight, sort, Some(limit + 1), Some(offset))
+        .transact(db)
+        .parEvalMap(maxConcurrent) { op =>
+          OperationQueries
+            .fetchTransaction(op.accountId, op.hash)
+            .transact(db)
+            .map(tx => op.copy(transaction = tx))
+        }
+        .compile
+        .toList
 
       total <- OperationQueries.countOperations(accountId, blockHeight).transact(db)
 
@@ -52,6 +52,15 @@ class OperationService(
       val operations = opsWithTx.slice(0, limit)
       GetOperationsResult(operations, total, truncated)
     }
+
+  def getOperation(
+      accountId: Operation.AccountId,
+      operationId: Operation.UID
+  )(implicit cs: ContextShift[IO]): IO[GetOperationResult] =
+    OperationQueries
+      .findOperation(accountId, operationId)
+      .map(GetOperationResult)
+      .transact(db)
 
   def deleteUnconfirmedTransactionView(accountId: UUID): IO[Int] =
     OperationQueries
@@ -78,19 +87,17 @@ class OperationService(
       offset: Int
   ): IO[GetUtxosResult] =
     for {
-      confirmedUtxos <-
-        OperationQueries
-          .fetchUTXOs(accountId, sort, Some(limit + 1), Some(offset))
-          .transact(db)
-          .compile
-          .toList
+      confirmedUtxos <- OperationQueries
+        .fetchUTXOs(accountId, sort, Some(limit + 1), Some(offset))
+        .transact(db)
+        .compile
+        .toList
 
       // Flag utxos used in the mempool
-      unconfirmedInputs <-
-        OperationQueries
-          .fetchUnconfirmedTransactionsViews(accountId)
-          .transact(db)
-          .map(_.flatMap(_.inputs).filter(_.belongs))
+      unconfirmedInputs <- OperationQueries
+        .fetchUnconfirmedTransactionsViews(accountId)
+        .transact(db)
+        .map(_.flatMap(_.inputs).filter(_.belongs))
 
       total <- OperationQueries.countUTXOs(accountId).transact(db)
 

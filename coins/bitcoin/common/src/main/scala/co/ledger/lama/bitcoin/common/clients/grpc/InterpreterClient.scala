@@ -35,6 +35,11 @@ trait InterpreterClient {
       sort: Option[Sort]
   ): IO[GetOperationsResult]
 
+  def getOperation(
+      accountId: UUID,
+      operationId: String
+  ): IO[Option[Operation]]
+
   def getUtxos(
       accountId: UUID,
       limit: Int,
@@ -131,6 +136,17 @@ class InterpreterGrpcClient(
         new Metadata
       )
       .map(GetOperationsResult.fromProto)
+
+  def getOperation(
+      accountId: UUID,
+      operationId: String
+  ): IO[Option[Operation]] =
+    client
+      .getOperation(
+        protobuf.GetOperationRequest(UuidUtils.uuidToBytes(accountId), operationId),
+        new Metadata
+      )
+      .map(_.operation.map(Operation.fromProto))
 
   def getUtxos(
       accountId: UUID,

@@ -57,6 +57,12 @@ class Interpreter(
     operationService.getOperations(accountId, blockHeight, limit, offset, sort)
   }
 
+  def getOperation(
+      accountId: Operation.AccountId,
+      operationId: Operation.UID
+  ): IO[GetOperationResult] =
+    operationService.getOperation(accountId, operationId)
+
   def getUtxos(
       accountId: UUID,
       requestLimit: Int,
