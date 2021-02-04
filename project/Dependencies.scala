@@ -2,7 +2,7 @@ import sbt.librarymanagement.{DependencyBuilders, LibraryManagementSyntax, Modul
 
 object Dependencies extends DependencyBuilders with LibraryManagementSyntax {
 
-  val http4sVersion = "0.21.16"
+  val http4sVersion = "0.21.18"
   val http4s: Seq[ModuleID] = Seq(
     "org.http4s" %% "http4s-blaze-server"       % http4sVersion,
     "org.http4s" %% "http4s-blaze-client"       % http4sVersion,
