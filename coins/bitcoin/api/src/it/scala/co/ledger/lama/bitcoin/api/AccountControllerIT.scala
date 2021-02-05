@@ -99,7 +99,7 @@ trait AccountControllerIT extends AnyFlatSpecLike with Matchers {
   private def getOperation(accountid: UUID, operationId: Operation.UID) =
     Request[IO](
       method = Method.GET,
-      uri = Uri.unsafeFromString(s"$serverUrl/accounts/$accountid/operations/${operationId.hex}")
+      uri = Uri.unsafeFromString(serverUrl)/ "accounts"/ accountid / "operations" / operationId.hex
     )
 
   def runTests(resourceName: String): Seq[Unit] = IOAssertion {
