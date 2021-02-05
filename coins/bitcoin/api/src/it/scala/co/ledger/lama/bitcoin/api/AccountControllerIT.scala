@@ -44,6 +44,7 @@ trait AccountControllerIT extends AnyFlatSpecLike with Matchers {
 
   val conf      = ConfigSource.default.loadOrThrow[ConfigSpec]
   val serverUrl = s"http://${conf.server.host}:${conf.server.port}"
+  val accounts  = Uri.unsafeFromString(serverUrl) / "accounts"
 
   private def accountsRes(resourceName: String): Resource[IO, List[TestAccount]] =
     Resource
@@ -55,51 +56,51 @@ trait AccountControllerIT extends AnyFlatSpecLike with Matchers {
       }
 
   private val accountRegisteringRequest =
-    Request[IO](method = Method.POST, uri = Uri.unsafeFromString(s"$serverUrl/accounts"))
+    Request[IO](method = Method.POST, uri = accounts)
 
   private def accountUpdateRequest(accountId: UUID) =
-    Request[IO](method = Method.PUT, uri = Uri.unsafeFromString(s"$serverUrl/accounts/$accountId"))
+    Request[IO](method = Method.PUT, uri = accounts / accountId.toString)
 
   private def getAccountRequest(accountId: UUID) =
     Request[IO](
       method = Method.GET,
-      uri = Uri.unsafeFromString(s"$serverUrl/accounts/$accountId")
+      uri = accounts / accountId.toString
     )
 
   private def getOperationsRequest(accountId: UUID, offset: Int, limit: Int, sort: Sort) =
     Request[IO](
       method = Method.GET,
-      uri = Uri.unsafeFromString(
-        s"$serverUrl/accounts/$accountId/operations?limit=$limit&offset=$offset&sort=$sort"
-      )
+      uri = accounts / accountId.toString / "operations"
+        +?("limit", limit)
+        +?("offset", offset)
+        +?("sort", sort.toString)
     )
 
   private def removeAccountRequest(accountId: UUID) =
     Request[IO](
       method = Method.DELETE,
-      uri = Uri.unsafeFromString(s"$serverUrl/accounts/$accountId")
+      uri = accounts / accountId.toString
     )
 
   private def getUTXOsRequest(accountId: UUID, offset: Int, limit: Int, sort: Sort) =
     Request[IO](
       method = Method.GET,
-      uri = Uri.unsafeFromString(
-        s"$serverUrl/accounts/$accountId/utxos?limit=$limit&offset=$offset&sort=$sort"
-      )
+      uri = accounts / accountId.toString / "utxos"
+        +?("limit", limit)
+        +?("offset", offset)
+        +?("sort", sort.toString)
     )
 
   private def getBalancesHistoryRequest(accountId: UUID) =
     Request[IO](
       method = Method.GET,
-      uri = Uri.unsafeFromString(
-        s"$serverUrl/accounts/$accountId/balances"
-      )
+      uri = accounts / accountId.toString / "balances"
     )
 
   private def getOperation(accountid: UUID, operationId: Operation.UID) =
     Request[IO](
       method = Method.GET,
-      uri = Uri.unsafeFromString(serverUrl)/ "accounts"/ accountid / "operations" / operationId.hex
+      uri = accounts / accountid.toString / "operations" / operationId.hex
     )
 
   def runTests(resourceName: String): Seq[Unit] = IOAssertion {
@@ -109,193 +110,191 @@ trait AccountControllerIT extends AnyFlatSpecLike with Matchers {
       inputs       <- accountsRes(resourceName)
       rabbitClient <- RabbitUtils.createClient(conf.eventsConfig.rabbit)
       channel      <- rabbitClient.createConnectionChannel
-    } yield
-      (
-        inputs,
-        client,
-        rabbitClient,
-        channel
-      )
+    } yield (
+      inputs,
+      client,
+      rabbitClient,
+      channel
+    )
 
     resources
-      .use {
-        case (accounts, client, rabbitClient, channel) =>
-          accounts.traverse { account =>
-            for {
+      .use { case (accounts, client, rabbitClient, channel) =>
+        accounts.traverse { account =>
+          for {
 
-              // This is retried because sometimes, the keychain service isn't ready when the tests start
-              accountRegistered <- IOUtils.retry[AccountRegistered](
-                client.expect[AccountRegistered](
-                  accountRegisteringRequest.withEntity(account.registerRequest)
-                )
+            // This is retried because sometimes, the keychain service isn't ready when the tests start
+            accountRegistered <- IOUtils.retry[AccountRegistered](
+              client.expect[AccountRegistered](
+                accountRegisteringRequest.withEntity(account.registerRequest)
               )
+            )
 
-              coinConf = conf.eventsConfig.coins(account.registerRequest.coin)
+            coinConf = conf.eventsConfig.coins(account.registerRequest.coin)
 
-              qName <- AccountNotifications
-                .ephemeralBoundQueue(
-                  rabbitClient,
-                  conf.eventsConfig.lamaEventsExchangeName,
-                  RoutingKey(
-                    s"${coinConf.coinFamily}.${coinConf.coin}.${accountRegistered.accountId.toString}"
-                  )
-                )(channel)
-
-              notifications <- AccountNotifications
-                .balanceUpdatedNotifications(rabbitClient, qName)(channel)
-
-              accountInfoAfterRegister <- client
-                .expect[AccountWithBalance](
-                  getAccountRequest(accountRegistered.accountId)
+            qName <- AccountNotifications
+              .ephemeralBoundQueue(
+                rabbitClient,
+                conf.eventsConfig.lamaEventsExchangeName,
+                RoutingKey(
+                  s"${coinConf.coinFamily}.${coinConf.coin}.${accountRegistered.accountId.toString}"
                 )
+              )(channel)
 
-              balanceNotification <- AccountNotifications
-                .waitBalanceUpdated(
-                  notifications
-                )
+            notifications <- AccountNotifications
+              .balanceUpdatedNotifications(rabbitClient, qName)(channel)
 
-              operations <- IOUtils
-                .fetchPaginatedItems[GetOperationsResult](
-                  (offset, limit) =>
-                    IOUtils.retryIf[GetOperationsResult](
-                      client.expect[GetOperationsResult](
-                        getOperationsRequest(
-                          accountRegistered.accountId,
-                          offset,
-                          limit,
-                          Sort.Descending
-                        )
-                      ),
-                      _.operations.nonEmpty
-                  ),
-                  _.truncated,
-                  0,
-                  20
-                )
-                .stream
-                .compile
-                .toList
-                .map(_.flatMap(_.operations))
-
-              firstOperation <- operations.headOption
-                .map(o =>
-                  client
-                    .expect[Option[Operation]](getOperation(accountRegistered.accountId, o.uid)))
-                .getOrElse(IO.none[Operation])
-
-              utxos <- IOUtils
-                .fetchPaginatedItems[GetUtxosResult](
-                  (offset, limit) =>
-                    client.expect[GetUtxosResult](
-                      getUTXOsRequest(accountRegistered.accountId, offset, limit, Sort.Ascending)
-                  ),
-                  _.truncated,
-                  0,
-                  20
-                )
-                .stream
-                .compile
-                .toList
-                .map(_.flatMap(_.utxos))
-
-              accountInfoAfterSync <- client.expect[AccountWithBalance](
+            accountInfoAfterRegister <- client
+              .expect[AccountWithBalance](
                 getAccountRequest(accountRegistered.accountId)
               )
 
-              balances <- client
-                .expect[GetBalanceHistoryResult](
-                  getBalancesHistoryRequest(
-                    accountRegistered.accountId
-                  )
+            balanceNotification <- AccountNotifications
+              .waitBalanceUpdated(
+                notifications
+              )
+
+            operations <- IOUtils
+              .fetchPaginatedItems[GetOperationsResult](
+                (offset, limit) =>
+                  IOUtils.retryIf[GetOperationsResult](
+                    client.expect[GetOperationsResult](
+                      getOperationsRequest(
+                        accountRegistered.accountId,
+                        offset,
+                        limit,
+                        Sort.Descending
+                      )
+                    ),
+                    _.operations.nonEmpty
+                  ),
+                _.truncated,
+                0,
+                20
+              )
+              .stream
+              .compile
+              .toList
+              .map(_.flatMap(_.operations))
+
+            firstOperation <- operations.headOption
+              .map(o =>
+                client
+                  .expect[Option[Operation]](getOperation(accountRegistered.accountId, o.uid))
+              )
+              .getOrElse(IO.none[Operation])
+
+            utxos <- IOUtils
+              .fetchPaginatedItems[GetUtxosResult](
+                (offset, limit) =>
+                  client.expect[GetUtxosResult](
+                    getUTXOsRequest(accountRegistered.accountId, offset, limit, Sort.Ascending)
+                  ),
+                _.truncated,
+                0,
+                20
+              )
+              .stream
+              .compile
+              .toList
+              .map(_.flatMap(_.utxos))
+
+            accountInfoAfterSync <- client.expect[AccountWithBalance](
+              getAccountRequest(accountRegistered.accountId)
+            )
+
+            balances <- client
+              .expect[GetBalanceHistoryResult](
+                getBalancesHistoryRequest(
+                  accountRegistered.accountId
                 )
-                .map(_.balances)
-
-              accountUpdateStatus <- client.status(
-                accountUpdateRequest(accountRegistered.accountId)
-                  .withEntity(UpdateSyncFrequency(60))
               )
+              .map(_.balances)
 
-              accountInfoAfterUpdate <- client.expect[AccountWithBalance](
+            accountUpdateStatus <- client.status(
+              accountUpdateRequest(accountRegistered.accountId)
+                .withEntity(UpdateSyncFrequency(60))
+            )
+
+            accountInfoAfterUpdate <- client.expect[AccountWithBalance](
+              getAccountRequest(accountRegistered.accountId)
+            )
+
+            accountDeletedStatus <- client.status(removeAccountRequest(accountRegistered.accountId))
+
+            deletedAccountResult <- IOUtils.retryIf[AccountWithBalance](
+              client.expect[AccountWithBalance](
                 getAccountRequest(accountRegistered.accountId)
-              )
+              ),
+              _.lastSyncEvent.exists(_.status == Deleted)
+            )
+          } yield {
+            val accountStr =
+              s"Account: ${accountInfoAfterRegister.accountId} (${account.registerRequest.scheme})"
 
-              accountDeletedStatus <- client.status(
-                removeAccountRequest(accountRegistered.accountId))
+            accountStr should "be registered" in {
+              accountInfoAfterRegister.accountId shouldBe accountRegistered.accountId
+              accountInfoAfterRegister.lastSyncEvent
+                .map(_.status) should (contain(Registered) or contain(Published))
+              accountInfoAfterRegister.label shouldBe account.registerRequest.label
+            }
 
-              deletedAccountResult <- IOUtils.retryIf[AccountWithBalance](
-                client.expect[AccountWithBalance](
-                  getAccountRequest(accountRegistered.accountId)
-                ),
-                _.lastSyncEvent.exists(_.status == Deleted)
-              )
-            } yield {
-              val accountStr =
-                s"Account: ${accountInfoAfterRegister.accountId} (${account.registerRequest.scheme})"
+            it should "emit a balance notification" in {
+              balanceNotification.accountId shouldBe accountRegistered.accountId
+              val Right(notificationBalance) =
+                balanceNotification.currentBalance.as[CurrentBalance]
+              notificationBalance.balance shouldBe balances.last.balance
+            }
 
-              accountStr should "be registered" in {
-                accountInfoAfterRegister.accountId shouldBe accountRegistered.accountId
-                accountInfoAfterRegister.lastSyncEvent
-                  .map(_.status) should (contain(Registered) or contain(Published))
-                accountInfoAfterRegister.label shouldBe account.registerRequest.label
-              }
+            it should s"have a balance of ${account.expected.balance}" in {
+              accountInfoAfterSync.balance shouldBe BigInt(account.expected.balance)
+              accountInfoAfterSync.lastSyncEvent.map(_.status) should contain(Synchronized)
+            }
 
-              it should "emit a balance notification" in {
-                balanceNotification.accountId shouldBe accountRegistered.accountId
-                val Right(notificationBalance) =
-                  balanceNotification.currentBalance.as[CurrentBalance]
-                notificationBalance.balance shouldBe balances.last.balance
-              }
+            it should s"have ${account.expected.utxosSize} utxos in AccountInfo API" in {
+              accountInfoAfterSync.utxos shouldBe account.expected.utxosSize
+            }
 
-              it should s"have a balance of ${account.expected.balance}" in {
-                accountInfoAfterSync.balance shouldBe BigInt(account.expected.balance)
-                accountInfoAfterSync.lastSyncEvent.map(_.status) should contain(Synchronized)
-              }
+            it should s"have ${account.expected.amountReceived} amount received" in {
+              accountInfoAfterSync.received shouldBe account.expected.amountReceived
+            }
 
-              it should s"have ${account.expected.utxosSize} utxos in AccountInfo API" in {
-                accountInfoAfterSync.utxos shouldBe account.expected.utxosSize
-              }
+            it should s"have ${account.expected.amountSent} amount spent" in {
+              accountInfoAfterSync.sent shouldBe account.expected.amountSent
+            }
 
-              it should s"have ${account.expected.amountReceived} amount received" in {
-                accountInfoAfterSync.received shouldBe account.expected.amountReceived
-              }
+            it should "have a correct balance history" in {
+              balances should have size account.expected.balanceHistorySize + 1 //This 1 is mempool balance
+              balances.last.balance shouldBe accountInfoAfterSync.balance
+            }
 
-              it should s"have ${account.expected.amountSent} amount spent" in {
-                accountInfoAfterSync.sent shouldBe account.expected.amountSent
-              }
+            it should s"have ${account.expected.utxosSize} utxos in UTXO API" in {
+              utxos.size shouldBe account.expected.utxosSize
+            }
 
-              it should "have a correct balance history" in {
-                balances should have size account.expected.balanceHistorySize + 1 //This 1 is mempool balance
-                balances.last.balance shouldBe accountInfoAfterSync.balance
-              }
+            it should s"have ${account.expected.opsSize} operations" in {
+              operations.size shouldBe account.expected.opsSize
+            }
 
-              it should s"have ${account.expected.utxosSize} utxos in UTXO API" in {
-                utxos.size shouldBe account.expected.utxosSize
-              }
+            val lastTxHash = operations.head.hash
+            it should s"have fetch operations to last cursor $lastTxHash" in {
+              lastTxHash shouldBe account.expected.lastTxHash
+            }
 
-              it should s"have ${account.expected.opsSize} operations" in {
-                operations.size shouldBe account.expected.opsSize
-              }
+            it should "have its operations accessible by uid" in {
+              firstOperation shouldBe operations.headOption
+            }
 
-              val lastTxHash = operations.head.hash
-              it should s"have fetch operations to last cursor $lastTxHash" in {
-                lastTxHash shouldBe account.expected.lastTxHash
-              }
+            it should "be updated" in {
+              accountUpdateStatus.code shouldBe 200
+              accountInfoAfterUpdate.syncFrequency shouldBe 60
+            }
 
-              it should "have its operations accessible by uid" in {
-                firstOperation shouldBe operations.headOption
-              }
-
-              it should "be updated" in {
-                accountUpdateStatus.code shouldBe 200
-                accountInfoAfterUpdate.syncFrequency shouldBe 60
-              }
-
-              it should "be unregistered" in {
-                accountDeletedStatus.code shouldBe 200
-                deletedAccountResult.lastSyncEvent.map(_.status) should contain(Deleted)
-              }
+            it should "be unregistered" in {
+              accountDeletedStatus.code shouldBe 200
+              deletedAccountResult.lastSyncEvent.map(_.status) should contain(Deleted)
             }
           }
+        }
       }
   }
 }
