@@ -70,10 +70,9 @@ trait AccountControllerIT extends AnyFlatSpecLike with Matchers {
   private def getOperationsRequest(accountId: UUID, offset: Int, limit: Int, sort: Sort) =
     Request[IO](
       method = Method.GET,
-      uri = accounts / accountId.toString / "operations"
-        +?("limit", limit)
-        +?("offset", offset)
-        +?("sort", sort.toString)
+      uri = Uri.unsafeFromString(
+        s"$serverUrl/accounts/$accountId/operations?limit=$limit&offset=$offset&sort=$sort"
+      )
     )
 
   private def removeAccountRequest(accountId: UUID) =
@@ -85,10 +84,9 @@ trait AccountControllerIT extends AnyFlatSpecLike with Matchers {
   private def getUTXOsRequest(accountId: UUID, offset: Int, limit: Int, sort: Sort) =
     Request[IO](
       method = Method.GET,
-      uri = accounts / accountId.toString / "utxos"
-        +?("limit", limit)
-        +?("offset", offset)
-        +?("sort", sort.toString)
+      uri = Uri.unsafeFromString(
+        s"$serverUrl/accounts/$accountId/utxos?limit=$limit&offset=$offset&sort=$sort"
+      )
     )
 
   private def getBalancesHistoryRequest(accountId: UUID) =
