@@ -12,7 +12,7 @@ import co.ledger.lama.common.utils.IOAssertion
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
-class OperationIT extends AnyFlatSpecLike with Matchers with TestResources {
+class OperationServiceIT extends AnyFlatSpecLike with Matchers with TestResources {
 
   val accountId: UUID = UUID.fromString("b723c553-3a9a-4130-8883-ee2f6c2f9202")
 
@@ -123,6 +123,55 @@ class OperationIT extends AnyFlatSpecLike with Matchers with TestResources {
       }
   }
 
+  it should "be fetched by uid" in IOAssertion {
+
+    setup() *>
+      appResources.use { db =>
+        val operationService = new OperationService(db, conf.maxConcurrent)
+        val flaggingService  = new FlaggingService(db)
+
+        for {
+          _ <- QueryUtils.saveTx(db, insertTx1, accountId)
+          _ <- flaggingService.flagInputsAndOutputs(accountId, List(inputAddress, outputAddress2))
+          _ <- operationService
+            .compute(accountId)
+            .through(operationService.saveOperationSink)
+            .compile
+            .toList
+
+          foundOperation <- operationService.getOperation(
+            Operation.AccountId(accountId),
+            Operation.uid(
+              Operation.AccountId(accountId),
+              Operation.TxId(
+                insertTx1.hash // because of compute which  put tx.hash in operation.hash instead of txid
+              ),
+              OperationType.Sent
+            )
+          )
+
+        } yield {
+
+          foundOperation.operation should not be empty
+          val GetOperationResult(Some(op)) = foundOperation
+
+          op.transaction should not be empty
+          val tx = op.transaction.get
+
+          op.accountId shouldBe accountId
+          op.hash shouldBe insertTx1.hash
+          op.operationType shouldBe OperationType.Sent
+
+          tx.fees shouldBe insertTx1.fees
+
+          tx.inputs.find(_.belongs).get.address shouldBe inputAddress.accountAddress
+          tx.outputs.find(_.belongs).get.address shouldBe outputAddress2.accountAddress
+          tx.outputs.find(_.belongs).get.changeType shouldBe Some(ChangeType.Internal)
+        }
+      }
+
+  }
+
   it should "fetched only ops from a blockHeight cursor" in IOAssertion {
     setup() *>
       appResources.use { db =>
@@ -222,12 +271,13 @@ class OperationIT extends AnyFlatSpecLike with Matchers with TestResources {
           ),
           List(
             OutputView( //create UTXO
-                       0,
-                       1000,
-                       "myAddress",
-                       "script",
-                       Some(ChangeType.External),
-                       Some(NonEmptyList(0, List(0))))
+              0,
+              1000,
+              "myAddress",
+              "script",
+              Some(ChangeType.External),
+              Some(NonEmptyList(0, List(0)))
+            )
           ),
           None,
           0
@@ -241,15 +291,16 @@ class OperationIT extends AnyFlatSpecLike with Matchers with TestResources {
           0,
           List(
             InputView( //using previously made UTXO
-                      "txHash1",
-                      0,
-                      0,
-                      1000,
-                      "myAddress",
-                      "script",
-                      Nil,
-                      Int.MaxValue,
-                      Some(NonEmptyList(0, List(0))))
+              "txHash1",
+              0,
+              0,
+              1000,
+              "myAddress",
+              "script",
+              Nil,
+              Int.MaxValue,
+              Some(NonEmptyList(0, List(0)))
+            )
           ),
           List( //creating 2 new UTXOs
             OutputView(

@@ -1,5 +1,7 @@
 package co.ledger.lama.bitcoin.interpreter.services
 
+import cats.data.OptionT
+
 import java.util.UUID
 import cats.effect.{ContextShift, IO}
 import co.ledger.lama.bitcoin.common.models.interpreter.{
@@ -56,11 +58,15 @@ class OperationService(
   def getOperation(
       accountId: Operation.AccountId,
       operationId: Operation.UID
-  )(implicit cs: ContextShift[IO]): IO[GetOperationResult] =
-    OperationQueries
-      .findOperation(accountId, operationId)
-      .map(GetOperationResult)
-      .transact(db)
+  )(implicit cs: ContextShift[IO]): IO[GetOperationResult] = {
+
+    val op = for {
+      operation <- OptionT(OperationQueries.findOperation(accountId, operationId))
+      tx        <- OptionT(OperationQueries.fetchTransaction(accountId.value, operation.hash))
+    } yield operation.copy(transaction = Some(tx))
+
+    op.value.transact(db).map(GetOperationResult)
+  }
 
   def deleteUnconfirmedTransactionView(accountId: UUID): IO[Int] =
     OperationQueries
